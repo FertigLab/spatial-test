@@ -113,8 +113,8 @@ filt_mat['matrix'].create_dataset('indices',data = inds)
 filt_mat['matrix/shape'][1] = len(spots)
 
 print('Size reduced to '+str(len(spots))+' spots')
-if len(spots)<200:
-    print('Warning: area may be too small for pipeline to process')
+if len(spots)<20:
+    print('Warning: area may be too small for pipeline to run properly')
 filt_mat.close()
 
 # Repack the h5 file to save space

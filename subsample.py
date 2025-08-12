@@ -102,7 +102,7 @@ filt_mat['matrix/shape'][1] = len(spots)
 
 print('Size reduced to '+str(len(spots))+' spots')
 if len(spots)<200:
-    print('Warning: area may be too small for pipeline to process')
+    print('Warning: area may be too small for Spacemarkers to run properly')
 old_spots.close()
 new_spots.close()
 filt_mat.close()
