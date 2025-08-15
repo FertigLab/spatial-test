@@ -33,13 +33,12 @@ files = ['filtered_feature_bc_matrix.h5',
          'spatial/tissue_lowres_image.png']
 if hd:
     files[1] = 'spatial/tissue_positions.parquet'
+    files.append('../../feature_slice.h5')
+    files.append('../../molecule_info.h5')
 
 # Ensure the needed files are present
 for file in files:
     assert os.path.exists(input_path+'/'+file)
-if hd:
-    assert os.path.exists(input_path+'/../../feature_slice.h5')
-    assert os.path.exists(input_path+'/../../molecule_info.h5')
 
 # Create output folders
 if os.path.exists(output_path):
@@ -60,13 +59,6 @@ else:
 for file in files:
     shutil.copyfile(input_path+'/'+file,output_path+'/'+file)
 os.chdir(output_path)
-
-# Create dummy files the pipeline needs for HD
-if hd:
-    fs = h5py.File('../../feature_slice.h5','w')
-    mi = h5py.File('../../molecule_info.h5','w')
-    fs.close()
-    mi.close()
 
 # Open tissue position list and filtered feature matrix
 filt_mat = h5py.File(files[0],'r+')
