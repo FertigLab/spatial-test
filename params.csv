@@ -1,2 +1,2 @@
-user,old_data,new_data,xmin,xmax,ymin,ymax
-iuy,sample_data,sample_small,76,99,44,60
+input_path,output_path,hd_resolution,xmin,xmax,ymin,ymax
+../../sample_hd_copy,../../sample_hd,square_016um,50,70,50,70

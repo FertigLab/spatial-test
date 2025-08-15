@@ -1,29 +1,29 @@
 import os
 import subprocess as sp
 import shutil
-import numpy as np
 import h5py
 import csv
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Take paramaters from params.csv
 param_file = open('params.csv','r',newline='')
 param_read = csv.reader(param_file, delimiter=',')
-assert param_read.__next__() == ['user','old_data','new_data','xmin','xmax','ymin','ymax']
+assert param_read.__next__() == ['input_path','output_path','hd_resolution','xmin','xmax','ymin','ymax']
 params = param_read.__next__()
 param_file.close()
 
-user = params[0]
-old_data = params[1]
-new_data = params[2]
+input_path = params[0]
+output_path = params[1]
+resolution = params[2]
+hd = bool(len(resolution))
 xmin = int(params[3])
 xmax = int(params[4])
 ymin = int(params[5])
 ymax = int(params[6])
 
-# File paths for the old and new datasets
-parent = '/Users/' + user + '/.nextflow/assets/break-through-cancer/btc-spatial-pipelines/'
-sample_path = parent + old_data + '/'
-new_path = parent + new_data + '/'
+if hd:
+    input_path = input_path + '/binned_outputs/' + resolution
 
 # List of all files that the pipeline uses
 files = ['filtered_feature_bc_matrix.h5',
@@ -31,37 +31,81 @@ files = ['filtered_feature_bc_matrix.h5',
          'spatial/scalefactors_json.json',
          'spatial/tissue_hires_image.png',
          'spatial/tissue_lowres_image.png']
+if hd:
+    files[1] = 'spatial/tissue_positions.parquet'
 
-# Open tissue position list
-os.chdir(sample_path)
+# Ensure the needed files are present
 for file in files:
-    assert os.path.exists(file)
-old_spots = open(files[1],'r',newline='')
-reader = csv.reader(old_spots, delimiter=',')
+    assert os.path.exists(input_path+'/'+file)
+if hd:
+    assert os.path.exists(input_path+'/../../feature_slice.h5')
+    assert os.path.exists(input_path+'/../../molecule_info.h5')
 
-# Copy old dataset to new path
-if os.path.exists(new_path):
-    shutil.rmtree(new_path)
-os.mkdir(new_path)
-os.mkdir(new_path + 'spatial')
+# Create output folders
+if os.path.exists(output_path):
+    shutil.rmtree(output_path)
+os.mkdir(output_path)
+if hd:
+    os.mkdir(output_path + '/binned_outputs')
+    os.mkdir(output_path + '/binned_outputs/'+resolution)
+    os.mkdir(output_path + '/binned_outputs/'+resolution+'/spatial')
+    output_path = output_path + '/binned_outputs/' + resolution
+else:
+    os.mkdir(output_path + '/spatial')
+    # If not HD, prepare to read the original csv
+    old_spots = open(input_path+'/'+files[1],'r',newline='')
+    reader = csv.reader(old_spots, delimiter=',')
+
+# Copy files to output folders
 for file in files:
-    shutil.copyfile(sample_path+file,new_path+file)
+    shutil.copyfile(input_path+'/'+file,output_path+'/'+file)
+os.chdir(output_path)
 
-# Open new tissue position list and filtered feature matrix
-os.chdir(new_path)
-os.remove(files[1])
-new_spots = open(files[1],'w',newline='')
-writer = csv.writer(new_spots, delimiter=',')
+# Create dummy files the pipeline needs for HD
+if hd:
+    fs = h5py.File('../../feature_slice.h5','w')
+    mi = h5py.File('../../molecule_info.h5','w')
+    fs.close()
+    mi.close()
+
+# Open tissue position list and filtered feature matrix
 filt_mat = h5py.File(files[0],'r+')
+if hd:
+    positions = pq.read_table(files[1])
+else:
+    os.remove(files[1])
+    new_spots = open(files[1],'w',newline='')
+    writer = csv.writer(new_spots, delimiter=',')
 
-# Copy only certain rows from the csv
+# Filter spots from the position list
 codes = []
+if hd:
+    spot_table = []
+    for i in range(positions.num_columns):
+        spot_table.append([])
 
-for row in reader:
-    if row[1] == '1':
-        if xmin<=int(row[3])<=xmax and ymin<=int(row[2])<=ymax:
-            writer.writerow(row)
-            codes.append(row[0].encode())
+    for i in range(positions.num_rows):
+        if positions[1][i].as_py() == 1:
+            if xmin<=int(positions[3][i])<=xmax and ymin<=int(positions[2][i])<=ymax:
+                for j in range(positions.num_columns):
+                    spot_table[j].append(positions[j][i])
+                codes.append(positions[0][i].as_py())
+    table = pa.table({'barcode': spot_table[0],
+                    'in_tissue': spot_table[1],
+                    'array_row': spot_table[2],
+                    'array_col': spot_table[3],
+                    'pxl_row_in_fullres': spot_table[4],
+                    'pxl_col_in_fullres': spot_table[5]})
+    os.remove(files[1])
+    pq.write_table(table, files[1])
+    print('Parquet file processed')
+else:
+    for row in reader:
+        if row[1] == '1':
+            if xmin<=int(row[3])<=xmax and ymin<=int(row[2])<=ymax:
+                writer.writerow(row)
+                codes.append(row[0])
+    print("CSV file processed")
 codes.sort()
 
 # Create lists of reduced data size
@@ -76,7 +120,7 @@ indices = filt_mat['matrix/indices'][:]
 datas = filt_mat['matrix/data'][:]
 
 for code in codes:
-    spot = barcodes.index(code)
+    spot = barcodes.index(code.encode())
     imin = indptr[spot]
     imax = indptr[spot+1]
     count = datas[imin:imax]
@@ -101,11 +145,15 @@ filt_mat['matrix'].create_dataset('indices',data = inds)
 filt_mat['matrix/shape'][1] = len(spots)
 
 print('Size reduced to '+str(len(spots))+' spots')
-if len(spots)<200:
+if len(spots)<20:
+    print("Warning: area is too small for pipeline to process")
+elif len(spots)<200:
     print('Warning: area may be too small for Spacemarkers to run properly')
-old_spots.close()
-new_spots.close()
+
 filt_mat.close()
+if not hd:
+    old_spots.close()
+    new_spots.close()
 
 # Repack the h5 file to save space
 shutil.copyfile(files[0],'temp_'+files[0])
