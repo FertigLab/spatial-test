@@ -1,2 +1,2 @@
 input_path,output_path,hd_resolution,xmin,xmax,ymin,ymax
-../../sample_hd_copy,../../sample_hd,square_016um,50,70,50,70
+/Users/iuy/.nextflow/assets/break-through-cancer/btc-spatial-pipelines/sample_data,/Users/iuy/.nextflow/assets/break-through-cancer/btc-spatial-pipelines/sample_small,,76,100,44,70

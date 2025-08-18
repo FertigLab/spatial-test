@@ -72,6 +72,9 @@ else:
 # Filter spots from the position list
 codes = []
 if hd:
+    print("Original dataset dimensions: " + str(pa.compute.min(positions[3]))+"-"+
+          str(pa.compute.max(positions[3]))+" by "+str(pa.compute.min(positions[2]))+
+          "-"+str(pa.compute.max(positions[2])))
     spot_table = []
     for i in range(positions.num_columns):
         spot_table.append([])
@@ -92,11 +95,17 @@ if hd:
     pq.write_table(table, files[1])
     print('Parquet file processed')
 else:
+    xvals = []
+    yvals = []
     for row in reader:
         if row[1] == '1':
+            xvals.append(int(row[3]))
+            yvals.append(int(row[2]))
             if xmin<=int(row[3])<=xmax and ymin<=int(row[2])<=ymax:
                 writer.writerow(row)
                 codes.append(row[0])
+    print("Original dataset dimensions: " + str(min(xvals))+"-"+
+          str(max(xvals))+" by "+str(min(yvals))+"-"+str(max(yvals)))
     print("CSV file processed")
 codes.sort()
 
