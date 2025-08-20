@@ -43,19 +43,22 @@ for file in files:
 # Create output folders
 if os.path.exists(output_path):
     shutil.rmtree(output_path)
-os.makedirs(output_path, exist_ok=True)
+
 if hd:
     os.makedirs(output_path + '/binned_outputs/'+resolution+'/spatial')
     output_path = output_path + '/binned_outputs/' + resolution
 else:
-    os.mkdir(output_path + '/spatial')
+    os.makedirs(output_path + '/spatial')
     # If not HD, prepare to read the original csv
     old_spots = open(input_path+'/'+files[1],'r',newline='')
     reader = csv.reader(old_spots, delimiter=',')
 
 # Copy files to output folders
 for file in files:
-    shutil.copyfile(input_path+'/'+file,output_path+'/'+file)
+    src = os.path.join(input_path, file)
+    dst = os.path.join(output_path, file)
+    print(f'Copying {src} to {dst}')
+    shutil.copyfile(src,dst)
 os.chdir(output_path)
 
 # Open tissue position list and filtered feature matrix
