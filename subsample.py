@@ -4,6 +4,7 @@ import subprocess as sp
 import shutil
 import h5py
 import csv
+import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -174,4 +175,12 @@ elif len(spots)<200:
 sp.run(['h5repack',files[0],'temp_'+files[0]])
 shutil.move('temp_'+files[0], files[0])
 
+# Pretend that lowres is the highres image and update scalefactors_json.json
+shutil.copyfile('spatial/tissue_lowres_image.png', 'spatial/tissue_hires_image.png')
+# Update scalefactors_json.json
+with open('spatial/scalefactors_json.json', 'r') as f:
+    scalefactors = json.load(f)
+scalefactors['tissue_hires_scalef'] = scalefactors['tissue_lowres_scalef']
+with open('spatial/scalefactors_json.json', 'w') as f:
+    json.dump(scalefactors, f, indent=4)
 
