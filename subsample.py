@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess as sp
 import shutil
 import h5py
@@ -7,7 +8,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 # Take paramaters from params.csv
-param_file = open('params.csv','r',newline='')
+if len(sys.argv) != 2:
+    print("Usage: python subsample.py <params.csv>")
+    sys.exit(1)
+
+params_arg = sys.argv[1]
+
+param_file = open(params_arg,'r',newline='')
 param_read = csv.reader(param_file, delimiter=',')
 assert param_read.__next__() == ['input_path','output_path','hd_resolution','xmin','xmax','ymin','ymax']
 params = param_read.__next__()
@@ -38,6 +45,7 @@ if hd:
 
 # Ensure the needed files are present
 for file in files:
+    print(f"Checking for {file} in {input_path}")
     assert os.path.exists(input_path+'/'+file)
 
 # Create output folders
@@ -49,9 +57,7 @@ if hd:
     output_path = output_path + '/binned_outputs/' + resolution
 else:
     os.makedirs(output_path + '/spatial')
-    # If not HD, prepare to read the original csv
-    old_spots = open(input_path+'/'+files[1],'r',newline='')
-    reader = csv.reader(old_spots, delimiter=',')
+
 
 # Copy files to output folders
 for file in files:
@@ -61,21 +67,12 @@ for file in files:
     shutil.copyfile(src,dst)
 os.chdir(output_path)
 
-# Open tissue position list and filtered feature matrix
-filt_mat = h5py.File(files[0],'r+')
-if hd:
-    positions = pq.read_table(files[1])
-else:
-    os.remove(files[1])
-    new_spots = open(files[1],'w',newline='')
-    writer = csv.writer(new_spots, delimiter=',')
 
 # Filter spots from the position list
 codes = []
 if hd:
-    print("Original dataset dimensions: " + str(pa.compute.min(positions[3]))+"-"+
-          str(pa.compute.max(positions[3]))+" by "+str(pa.compute.min(positions[2]))+
-          "-"+str(pa.compute.max(positions[2])))
+    positions = pq.read_table(files[1])
+    print(f"Original dataset: {pa.compute.max(positions[3])} by {pa.compute.max(positions[2])} bins")
     spot_table = []
     for i in range(positions.num_columns):
         spot_table.append([])
@@ -96,21 +93,30 @@ if hd:
     pq.write_table(table, files[1])
     print('Parquet file processed')
 else:
+    os.remove(files[1])
+    new_spots = open(files[1],'w',newline='')
+    writer = csv.writer(new_spots, delimiter=',')
+    old_spots = open(os.path.join(input_path,files[1]),'r',newline='')
+    reader = csv.reader(old_spots, delimiter=',')
+    
     xvals = []
     yvals = []
     for row in reader:
-        if row[1] == '1':
+        if row[1] == '1':                   # Only keep spots in tissue
             xvals.append(int(row[3]))
             yvals.append(int(row[2]))
             if xmin<=int(row[3])<=xmax and ymin<=int(row[2])<=ymax:
                 writer.writerow(row)
                 codes.append(row[0])
-    print("Original dataset dimensions: " + str(min(xvals))+"-"+
-          str(max(xvals))+" by "+str(min(yvals))+"-"+str(max(yvals)))
-    print("CSV file processed")
+    print(f"Original dataset: {max(xvals)} by {max(yvals)} spots")
+    print(f"CSV file processed")
+    old_spots.close()
+    new_spots.close()
+
 codes.sort()
 
 # Create lists of reduced data size
+filt_mat = h5py.File(files[0],'r+')
 spots = []
 ptrs = [0]
 counts = []
@@ -142,8 +148,8 @@ del filt_mat['matrix/indices']
 del filt_mat['matrix/indptr']
 filt_mat['matrix'].create_dataset('barcodes',data = codes)
 filt_mat['matrix'].create_dataset('indptr',data = ptrs)
-filt_mat['matrix'].create_dataset('data',data = counts)
-filt_mat['matrix'].create_dataset('indices',data = inds)
+filt_mat['matrix'].create_dataset('data',data = counts, compression='gzip')
+filt_mat['matrix'].create_dataset('indices',data = inds, compression='gzip')
 filt_mat['matrix/shape'][1] = len(spots)
 
 print('Size reduced to '+str(len(spots))+' spots')
@@ -153,9 +159,7 @@ elif len(spots)<200:
     print('Warning: area may be too small for Spacemarkers to run properly')
 
 filt_mat.close()
-if not hd:
-    old_spots.close()
-    new_spots.close()
+
 
 # Repack the h5 file to save space
 shutil.copyfile(files[0],'temp_'+files[0])
