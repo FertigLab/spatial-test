@@ -43,11 +43,9 @@ for file in files:
 # Create output folders
 if os.path.exists(output_path):
     shutil.rmtree(output_path)
-os.mkdir(output_path)
+os.makedirs(output_path, exist_ok=True)
 if hd:
-    os.mkdir(output_path + '/binned_outputs')
-    os.mkdir(output_path + '/binned_outputs/'+resolution)
-    os.mkdir(output_path + '/binned_outputs/'+resolution+'/spatial')
+    os.makedirs(output_path + '/binned_outputs/'+resolution+'/spatial')
     output_path = output_path + '/binned_outputs/' + resolution
 else:
     os.mkdir(output_path + '/spatial')
