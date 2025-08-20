@@ -30,6 +30,7 @@ ymin = int(params[5])
 ymax = int(params[6])
 
 if hd:
+    base_path = input_path
     input_path = input_path + '/binned_outputs/' + resolution
 
 # List of all files that the pipeline uses
@@ -40,20 +41,29 @@ files = ['filtered_feature_bc_matrix.h5',
          'spatial/tissue_lowres_image.png']
 if hd:
     files[1] = 'spatial/tissue_positions.parquet'
-    files.append('../../feature_slice.h5')
-    files.append('../../molecule_info.h5')
 
 # Ensure the needed files are present
 for file in files:
     print(f"Checking for {file} in {input_path}")
     assert os.path.exists(input_path+'/'+file)
 
-# Create output folders
+# Create output folders and create dummy feature_slice.h5
 if os.path.exists(output_path):
     shutil.rmtree(output_path)
 
 if hd:
     os.makedirs(output_path + '/binned_outputs/'+resolution+'/spatial')
+    slice_src = os.path.join(base_path, 'feature_slice.h5')
+    slice_dst = os.path.join(output_path, 'feature_slice.h5')
+    shutil.copyfile(slice_src, slice_dst)
+
+    #slim down feature_slice.h5 to keep size minimal
+    with h5py.File(slice_dst, 'r+') as f:
+        objects = list(f.keys())
+        for obj in objects:
+            del f[obj]
+    sp.run(['h5repack',slice_dst,os.path.join(output_path,'temp_feature_slice.h5')])
+    shutil.move(os.path.join(output_path,'temp_feature_slice.h5'),slice_dst)
     output_path = output_path + '/binned_outputs/' + resolution
 else:
     os.makedirs(output_path + '/spatial')
@@ -115,7 +125,7 @@ else:
 
 codes.sort()
 
-# Create lists of reduced data size
+# Create reduced feature matrix
 filt_mat = h5py.File(files[0],'r+')
 spots = []
 ptrs = [0]
@@ -151,6 +161,7 @@ filt_mat['matrix'].create_dataset('indptr',data = ptrs)
 filt_mat['matrix'].create_dataset('data',data = counts, compression='gzip')
 filt_mat['matrix'].create_dataset('indices',data = inds, compression='gzip')
 filt_mat['matrix/shape'][1] = len(spots)
+filt_mat.close()
 
 print('Size reduced to '+str(len(spots))+' spots')
 if len(spots)<20:
@@ -158,11 +169,9 @@ if len(spots)<20:
 elif len(spots)<200:
     print('Warning: area may be too small for Spacemarkers to run properly')
 
-filt_mat.close()
-
 
 # Repack the h5 file to save space
-shutil.copyfile(files[0],'temp_'+files[0])
-os.remove(files[0])
-sp.run(['h5repack','temp_'+files[0],files[0]])
-os.remove('temp_'+files[0])
+sp.run(['h5repack',files[0],'temp_'+files[0]])
+shutil.move('temp_'+files[0], files[0])
+
+
