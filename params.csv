@@ -1,2 +1,2 @@
-user,old_data,new_data,xmin,xmax,ymin,ymax
-iuy,sample_data,sample_small,76,99,44,60
+input_path,output_path,hd_resolution,xmin,xmax,ymin,ymax
+/Users/iuy/.nextflow/assets/break-through-cancer/btc-spatial-pipelines/sample_data,/Users/iuy/.nextflow/assets/break-through-cancer/btc-spatial-pipelines/sample_small,,76,100,44,70
