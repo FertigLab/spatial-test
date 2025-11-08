@@ -7,6 +7,7 @@ import csv
 import json
 import pyarrow as pa
 import pyarrow.parquet as pq
+import scanpy as sc
 
 # Take paramaters from params.csv
 if len(sys.argv) != 2:
@@ -82,7 +83,7 @@ os.chdir(output_path)
 codes = []
 if hd:
     positions = pq.read_table(files[1])
-    print(f"Original dataset: {pa.compute.max(positions[3])} by {pa.compute.max(positions[2])} bins")
+    print(f"Original dataset: {positions.num_rows} spots")
     spot_table = []
     for i in range(positions.num_columns):
         spot_table.append([])
@@ -101,7 +102,7 @@ if hd:
                     'pxl_col_in_fullres': spot_table[5]})
     os.remove(files[1])
     pq.write_table(table, files[1])
-    print('Parquet file processed')
+    print(f'Parquet with {len(codes)} spots created')
 else:
     os.remove(files[1])
     new_spots = open(files[1],'w',newline='')
@@ -123,56 +124,23 @@ else:
     old_spots.close()
     new_spots.close()
 
-codes.sort()
 
-# Create reduced feature matrix
-filt_mat = h5py.File(files[0],'r+')
-spots = []
-ptrs = [0]
-counts = []
-inds = []
-total = 0
-barcodes = filt_mat['matrix/barcodes'][:].tolist()
-indptr = filt_mat['matrix/indptr'][:]
-indices = filt_mat['matrix/indices'][:]
-datas = filt_mat['matrix/data'][:]
+# Filter the h5 matrix to keep only selected spots
+adata = sc.read_10x_h5(files[0])
+adata = adata[adata.obs_names.isin(codes), :].copy()
 
-for code in codes:
-    spot = barcodes.index(code.encode())
-    imin = indptr[spot]
-    imax = indptr[spot+1]
-    count = datas[imin:imax]
-    ind = indices[imin:imax]
+#create the new h5 file
+filt_mat = h5py.File(files[0],'w')
+filt_mat.create_group('matrix')
+filt_mat['matrix'].create_group('shape')
 
-    spots.append(spot)
-    for i in range(imax-imin):
-        counts.append(count[i])
-        inds.append(ind[i])
-        total += 1
-    ptrs.append(total)
-
-# Delete h5 datasets and replace with reduced lists
-del filt_mat['matrix/barcodes']
-del filt_mat['matrix/data']
-del filt_mat['matrix/indices']
-del filt_mat['matrix/indptr']
-filt_mat['matrix'].create_dataset('barcodes',data = codes)
-filt_mat['matrix'].create_dataset('indptr',data = ptrs)
-filt_mat['matrix'].create_dataset('data',data = counts, compression='gzip')
-filt_mat['matrix'].create_dataset('indices',data = inds, compression='gzip')
-filt_mat['matrix/shape'][1] = len(spots)
+filt_mat['matrix'].create_dataset('barcodes',data = adata.obs_names.tolist())
+filt_mat['matrix'].create_dataset('indptr',data = adata.X.indptr)
+filt_mat['matrix'].create_dataset('data',data = adata.X.data, compression='gzip')
+filt_mat['matrix'].create_dataset('indices',data = adata.X.indices, compression='gzip')
+filt_mat['matrix/shape'].create_dataset = adata.X.shape
 filt_mat.close()
 
-print('Size reduced to '+str(len(spots))+' spots')
-if len(spots)<20:
-    print("Warning: area is too small for pipeline to process")
-elif len(spots)<200:
-    print('Warning: area may be too small for Spacemarkers to run properly')
-
-
-# Repack the h5 file to save space
-sp.run(['h5repack',files[0],'temp_'+files[0]])
-shutil.move('temp_'+files[0], files[0])
 
 # Pretend that lowres is the highres image and update scalefactors_json.json
 shutil.copyfile('spatial/tissue_lowres_image.png', 'spatial/tissue_hires_image.png')
