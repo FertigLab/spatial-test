@@ -130,17 +130,23 @@ adata = sc.read_10x_h5(files[0])
 adata = adata[adata.obs_names.isin(codes), :].copy()
 
 #create the new h5 file
-filt_mat = h5py.File(files[0],'w')
-filt_mat.create_group('matrix')
-filt_mat['matrix'].create_group('shape')
+filt_mat = h5py.File(files[0],'r+')
+del filt_mat['matrix/barcodes']
+del filt_mat['matrix/data']
+del filt_mat['matrix/indices']
+del filt_mat['matrix/indptr']
+del filt_mat['matrix/shape']
 
 filt_mat['matrix'].create_dataset('barcodes',data = adata.obs_names.tolist())
 filt_mat['matrix'].create_dataset('indptr',data = adata.X.indptr)
 filt_mat['matrix'].create_dataset('data',data = adata.X.data, compression='gzip')
 filt_mat['matrix'].create_dataset('indices',data = adata.X.indices, compression='gzip')
-filt_mat['matrix/shape'].create_dataset = adata.X.shape
+filt_mat['matrix'].create_dataset('shape', data = adata.shape[::-1])
 filt_mat.close()
 
+# Repack the h5 file to save space
+sp.run(['h5repack',files[0],'temp_'+files[0]])
+shutil.move('temp_'+files[0], files[0])
 
 # Pretend that lowres is the highres image and update scalefactors_json.json
 shutil.copyfile('spatial/tissue_lowres_image.png', 'spatial/tissue_hires_image.png')
