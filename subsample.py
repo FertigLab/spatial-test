@@ -30,9 +30,6 @@ xmax = int(params[4])
 ymin = int(params[5])
 ymax = int(params[6])
 
-if hd:
-    base_path = input_path
-    input_path = input_path + '/binned_outputs/' + resolution
 
 # List of all files that the pipeline uses
 files = ['filtered_feature_bc_matrix.h5',
@@ -42,6 +39,8 @@ files = ['filtered_feature_bc_matrix.h5',
          'spatial/tissue_lowres_image.png']
 if hd:
     files[1] = 'spatial/tissue_positions.parquet'
+    base_path = input_path
+    input_path = input_path + '/binned_outputs/' + resolution
 
 # Ensure the needed files are present
 for file in files:
@@ -90,9 +89,9 @@ if hd:
 
     for i in range(positions.num_rows):
         if positions[1][i].as_py() == 1:
-            if xmin<=int(positions[3][i])<=xmax and ymin<=int(positions[2][i])<=ymax:
+            if xmin<=positions[3][i].as_py()<=xmax and ymin<=positions[2][i].as_py()<=ymax:
                 for j in range(positions.num_columns):
-                    spot_table[j].append(positions[j][i])
+                    spot_table[j].append(positions[j][i].as_py())
                 codes.append(positions[0][i].as_py())
     table = pa.table({'barcode': spot_table[0],
                     'in_tissue': spot_table[1],
