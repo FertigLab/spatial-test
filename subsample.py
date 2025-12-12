@@ -49,8 +49,7 @@ for file in files:
     assert os.path.exists(input_path+'/'+file)
 
 # Create output folders and create dummy feature_slice.h5
-if os.path.exists(output_path):
-    shutil.rmtree(output_path)
+os.makedirs(output_path, exist_ok=True)
 
 if hd:
     os.makedirs(output_path + '/binned_outputs/'+resolution+'/spatial')
@@ -125,9 +124,16 @@ else:
     new_spots.close()
 
 
-# Filter the h5 matrix to keep only selected spots
+# Filter the h5 matrix to keep only selected spots and 2k genes
 adata = sc.read_10x_h5(files[0])
+adata.layers["counts"] = adata.X.copy()
+sc.pp.normalize_total(adata)
+sc.pp.log1p(adata)
+sc.pp.highly_variable_genes(adata, n_top_genes=2000, subset=True)
 adata = adata[adata.obs_names.isin(codes), :].copy()
+#copy the X back from layers to X
+adata.X = adata.layers["counts"][adata.obs_names.isin(codes), :].copy()
+adata.layers.clear()
 
 #create the new h5 file
 filt_mat = h5py.File(files[0],'r+')
@@ -136,12 +142,17 @@ del filt_mat['matrix/data']
 del filt_mat['matrix/indices']
 del filt_mat['matrix/indptr']
 del filt_mat['matrix/shape']
+del filt_mat['matrix/features']
 
 filt_mat['matrix'].create_dataset('barcodes',data = adata.obs_names.tolist())
 filt_mat['matrix'].create_dataset('indptr',data = adata.X.indptr)
 filt_mat['matrix'].create_dataset('data',data = adata.X.data, compression='gzip')
 filt_mat['matrix'].create_dataset('indices',data = adata.X.indices, compression='gzip')
 filt_mat['matrix'].create_dataset('shape', data = adata.shape[::-1])
+filt_mat['matrix'].create_dataset('features/name', data = adata.var_names.tolist())
+filt_mat['matrix'].create_dataset('features/id', data = adata.var['gene_ids'].tolist())
+filt_mat['matrix'].create_dataset('features/feature_type', data = adata.var['feature_types'].tolist())
+filt_mat['matrix'].create_dataset('features/genome', data = adata.var['genome'].tolist())
 filt_mat.close()
 
 # Repack the h5 file to save space
@@ -157,3 +168,6 @@ scalefactors['tissue_hires_scalef'] = scalefactors['tissue_lowres_scalef']
 with open('spatial/scalefactors_json.json', 'w') as f:
     json.dump(scalefactors, f, indent=4)
 
+# Test that we can read the final h5 file
+test=sc.read_10x_h5(files[0])
+print(f"Subsampled dataset: {test}")
